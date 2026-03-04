@@ -64,7 +64,6 @@ class XMLSecurityKey
     const RSA_SHA384 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha384';
     const RSA_SHA512 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha512';
     const SHA1_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha1-rsa-MGF1';
-    const SHA224_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha224-rsa-MGF1';
     const SHA256_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha256-rsa-MGF1';
     const SHA384_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha384-rsa-MGF1';
     const SHA512_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha512-rsa-MGF1';
@@ -270,17 +269,6 @@ class XMLSecurityKey
                     break;
                     }
                 }
-            case (self::SHA224_RSA_MGF1):
-                $this->cryptParams['library'] = 'phpseclib';
-                $this->cryptParams['method'] = 'http://www.w3.org/2007/05/xmldsig-more#sha224-rsa-MGF1';
-                $this->cryptParams['digest'] = 'sha224';
-                if (is_array($params) && ! empty($params['type'])) {
-                    if ($params['type'] == 'public' || $params['type'] == 'private') {
-                    $this->cryptParams['type'] = $params['type'];
-                    break;
-                    }
-                }
-                throw new Exception('Certificate "type" (private/public) must be passed via parameters');
             case (self::SHA256_RSA_MGF1):
                 $this->cryptParams['library'] = 'phpseclib';
                 $this->cryptParams['method'] = 'http://www.w3.org/2007/05/xmldsig-more#sha256-rsa-MGF1';
