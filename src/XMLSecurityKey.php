@@ -3,8 +3,7 @@ namespace RobRichards\XMLSecLibs;
 
 use DOMElement;
 use Exception;
-use phpseclib\Crypt\RSA;
-use phpseclib\File\X509;
+use phpseclib3\Crypt\PublicKeyLoader;
 
 /**
  * xmlseclibs.php
@@ -446,21 +445,16 @@ class XMLSecurityKey
             }
         }
         if ($this->cryptParams['library'] == 'phpseclib') {
+            $private = PublicKeyLoader::load($this->key)
+                ->withHash($this->cryptParams['digest'])
+                ->withMGFHash($this->cryptParams['digest']);
+
             switch ($this->cryptParams['type']) {
                 case 'public':
-                    $rsa = new RSA();
-                    if ($isCert) {
-                        $x509 = new X509();
-                        $x509->loadX509($this->key);
-                        $this->key = $x509->getPublicKey();
-                    }
-                    $rsa->loadKey($this->key);
-                    $this->key = $rsa;
+                    $this->key = $private->getPublicKey();
                     break;
                 case 'private':
-                    $rsa = new RSA();
-                    $rsa->loadKey($this->key);
-                    $this->key = $rsa;
+                    $this->key = $private;
                     break;
                 default:
                     throw new Exception('Unknown type');
@@ -654,11 +648,12 @@ class XMLSecurityKey
         if (empty($this->key)) {
             throw new Exception('key not set');
         }
-        $rsa = new RSA();
-        $rsa->loadKey($this->key);
-        $rsa->setHash($this->cryptParams['digest']);
-        $rsa->setMGFHash($this->cryptParams['digest']);
-        $signature = $rsa->sign($data);
+        $private = PublicKeyLoader::load($this->key)
+            ->withHash($this->cryptParams['digest'])
+            ->withMGFHash($this->cryptParams['digest']);
+
+        $signature = $private->sign($data);
+
         if (!$signature) {
             throw new Exception('Failure Signing Data: - ' . $this->cryptParams['digest']);
         }
@@ -709,11 +704,13 @@ class XMLSecurityKey
         if (empty($this->key)) {
             throw new Exception('key not set');
         }
-        $rsa = new RSA();
-        $rsa->loadKey($this->key);
-        $rsa->setHash($this->cryptParams['digest']);
-        $rsa->setMGFHash($this->cryptParams['digest']);
-        $verified = $rsa->verify($data, $signature);
+        $private = PublicKeyLoader::load($this->key)
+            ->withHash($this->cryptParams['digest'])
+            ->withMGFHash($this->cryptParams['digest']);
+
+        $public = $private->getPublicKey();
+
+        $verified = $public->verify($data, $signature);
         if ($verified) {
             return 1;
         } else {
