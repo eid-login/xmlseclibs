@@ -3,13 +3,12 @@ namespace RobRichards\XMLSecLibs;
 
 use DOMElement;
 use Exception;
-use phpseclib\Crypt\RSA;
-use phpseclib\File\X509;
+use phpseclib3\Crypt\PublicKeyLoader;
 
 /**
  * xmlseclibs.php
  *
- * Copyright (c) 2007-2020, Robert Richards <rrichards@cdatazone.org>.
+ * Copyright (c) 2007-2024, Robert Richards <rrichards@cdatazone.org>.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +41,7 @@ use phpseclib\File\X509;
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * @author    Robert Richards <rrichards@cdatazone.org>
- * @copyright 2007-2020 Robert Richards <rrichards@cdatazone.org>
+ * @copyright 2007-2024 Robert Richards <rrichards@cdatazone.org>
  * @license   http://www.opensource.org/licenses/bsd-license.php  BSD License
  */
 
@@ -64,7 +63,6 @@ class XMLSecurityKey
     const RSA_SHA384 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha384';
     const RSA_SHA512 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha512';
     const SHA1_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha1-rsa-MGF1';
-    const SHA224_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha224-rsa-MGF1';
     const SHA256_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha256-rsa-MGF1';
     const SHA384_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha384-rsa-MGF1';
     const SHA512_RSA_MGF1 = 'http://www.w3.org/2007/05/xmldsig-more#sha512-rsa-MGF1';
@@ -270,17 +268,6 @@ class XMLSecurityKey
                     break;
                     }
                 }
-            case (self::SHA224_RSA_MGF1):
-                $this->cryptParams['library'] = 'phpseclib';
-                $this->cryptParams['method'] = 'http://www.w3.org/2007/05/xmldsig-more#sha224-rsa-MGF1';
-                $this->cryptParams['digest'] = 'sha224';
-                if (is_array($params) && ! empty($params['type'])) {
-                    if ($params['type'] == 'public' || $params['type'] == 'private') {
-                    $this->cryptParams['type'] = $params['type'];
-                    break;
-                    }
-                }
-                throw new Exception('Certificate "type" (private/public) must be passed via parameters');
             case (self::SHA256_RSA_MGF1):
                 $this->cryptParams['library'] = 'phpseclib';
                 $this->cryptParams['method'] = 'http://www.w3.org/2007/05/xmldsig-more#sha256-rsa-MGF1';
@@ -458,21 +445,16 @@ class XMLSecurityKey
             }
         }
         if ($this->cryptParams['library'] == 'phpseclib') {
+            $private = PublicKeyLoader::load($this->key)
+                ->withHash($this->cryptParams['digest'])
+                ->withMGFHash($this->cryptParams['digest']);
+
             switch ($this->cryptParams['type']) {
                 case 'public':
-                    $rsa = new RSA();
-                    if ($isCert) {
-                        $x509 = new X509();
-                        $x509->loadX509($this->key);
-                        $this->key = $x509->getPublicKey();
-                    }
-                    $rsa->loadKey($this->key);
-                    $this->key = $rsa;
+                    $this->key = $private->getPublicKey();
                     break;
                 case 'private':
-                    $rsa = new RSA();
-                    $rsa->loadKey($this->key);
-                    $this->key = $rsa;
+                    $this->key = $private;
                     break;
                 default:
                     throw new Exception('Unknown type');
@@ -557,6 +539,9 @@ class XMLSecurityKey
             // obtain and remove the authentication tag
             $offset = 0 - self::AUTHTAG_LENGTH;
             $authTag = substr($data, $offset);
+            if (strlen($authTag) !== self::AUTHTAG_LENGTH) {
+                throw new Exception('Authentication tag length is invalid');
+            }
             $data = substr($data, 0, $offset);
             $decrypted = openssl_decrypt($data, $this->cryptParams['cipher'], $this->key, OPENSSL_RAW_DATA, $this->iv, $authTag);
         } else {
@@ -663,11 +648,12 @@ class XMLSecurityKey
         if (empty($this->key)) {
             throw new Exception('key not set');
         }
-        $rsa = new RSA();
-        $rsa->loadKey($this->key);
-        $rsa->setHash($this->cryptParams['digest']);
-        $rsa->setMGFHash($this->cryptParams['digest']);
-        $signature = $rsa->sign($data);
+        $private = PublicKeyLoader::load($this->key)
+            ->withHash($this->cryptParams['digest'])
+            ->withMGFHash($this->cryptParams['digest']);
+
+        $signature = $private->sign($data);
+
         if (!$signature) {
             throw new Exception('Failure Signing Data: - ' . $this->cryptParams['digest']);
         }
@@ -718,11 +704,13 @@ class XMLSecurityKey
         if (empty($this->key)) {
             throw new Exception('key not set');
         }
-        $rsa = new RSA();
-        $rsa->loadKey($this->key);
-        $rsa->setHash($this->cryptParams['digest']);
-        $rsa->setMGFHash($this->cryptParams['digest']);
-        $verified = $rsa->verify($data, $signature);
+        $private = PublicKeyLoader::load($this->key)
+            ->withHash($this->cryptParams['digest'])
+            ->withMGFHash($this->cryptParams['digest']);
+
+        $public = $private->getPublicKey();
+
+        $verified = $public->verify($data, $signature);
         if ($verified) {
             return 1;
         } else {
